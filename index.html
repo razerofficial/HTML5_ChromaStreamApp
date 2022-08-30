@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<title>Chroma Stream App</title>
+	<script src="ChromaSDKWS.js"></script>
+	<style>
+		body {
+			font-family: Calibri;
+		}
+
+		a {
+			color: white;
+		}
+
+		.large {
+			font-size: 1.5em;
+		}
+
+		.padded {
+			margin: 5px
+		}
+	</style>
+</head>
+
+<body style="background: black; color: white;">
+	<div id="divPage"
+		style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%">
+		<script>
+			divPage.style.height = window.innerHeight + 'px';
+		</script>
+		<div id="panelUnsupported" class="large" style="display: none; width: 500px">Streaming Chroma RGB is not supported.
+			Be sure to
+			update to the latest
+			version of <a target="_blank" href="https://www.razer.com/synapse-3">Razer Synapse</a> and install the Chroma
+			Connect module.
+		</div>
+		<div id="panelApp" style="display: none">
+			<div style="display: flex; flex-direction: column;">
+				<div class="padded">Authorize Stream Source</div>
+				<div style="display: flex; flex-direction: row;">
+					<button id="btnGetShortcode" class="padded" disabled>Get Shortcode</button>
+					<label id="txtShortcode" class="padded"
+						style="width: 100px; height: 20px; border: 1px solid white; text-align: center"></label>
+					<button id="btnCopy" class="padded" disabled>Copy</button>
+					<a target="_blank" href="https://stream.razer.com/">Open Razer Streaming Portal</a>
+				</div>
+				<div style="display: flex; flex-direction: row;">
+					<label class="padded">Stream Id:</label>
+					<input id="txtStreamId" type="text" class="padded"></input>
+				</div>
+				<div style="display: flex; flex-direction: row;">
+					<label class="padded">Stream Key:</label>
+					<input id="txtStreamKey" type="password" class="padded"></input>
+				</div>
+				<div style="display: flex; flex-direction: row;">
+					<label class="padded" for="chkBroadcast">Broadcast Chroma RGB:</label>
+					<input type="checkbox" id="chkBroadcast" class="padded" disabled></input>
+					<label class="padded" style="margin-left: 100px">Status:</label>
+					<span id="txtStatus" class="padded"></span>
+				</div>
+			</div>
+		</div>
+	</div>
+</body>
+
+<script>
+
+	const SOCKET_OPEN = 1;
+	var streamStatus = '';
+	var streamSocket = null;
+	var connectedOnce = false;
+	var intervalTick = null;
+	var timerRequest = Date.now();
+
+	function connectStreamSocket() {
+		if (streamSocket == undefined) {
+			streamSocket = new WebSocket("wss://chromasdk.io:13340/razer/stream");
+			streamSocket.onopen = function (event) {
+				//console.log('Stream socket opened');
+				connectedOnce = true;
+				panelUnsupported.style.display = 'none';
+				panelApp.style.display = '';
+				if (!intervalTick) {
+					intervalTick = setInterval(function () {
+						tick();
+					}, 1000);
+				}
+				streamSocket.onmessage = function (event) {
+					customizeHandleStreamMessage(event);
+				}
+			};
+			streamSocket.onclose = function (event) {
+				streamSocket = undefined;
+				if (!connectedOnce) {
+					panelUnsupported.style.display = '';
+					panelApp.style.display = 'none';
+				}
+				setTimeout(function () {
+					// reconnect after delay
+					connectStreamSocket();
+				}, 5000);
+			};
+			streamSocket.onerror = function (error) {
+				console.error('streamSocket error! ', error);
+				if (!connectedOnce) {
+					panelUnsupported.style.display = '';
+					panelApp.style.display = 'none';
+				}
+				setTimeout(function () {
+					// reconnect after delay
+					connectStreamSocket();
+				}, 5000);
+			};
+		}
+	}
+
+	function monitorStreamSocket() {
+		setInterval(function () {
+			if (streamSocket != undefined && streamSocket.readyState === SOCKET_OPEN) {
+				let sendJson = {
+					"method": "ChromaSDKStreamGetStatus"
+				};
+				streamSocket.send(JSON.stringify(sendJson));
+			}
+		}, 1000);
+	}
+
+	function setStatus(status) {
+		txtStatus.innerText = status;
+	}
+
+	function setupBtnGetShortcode() {
+		if (streamStatus == 'READY') {
+			btnGetShortcode.disabled = false;
+		} else {
+			btnGetShortcode.disabled = true;
+		}
+	}
+
+	function setupBtnCopy() {
+		if (txtShortcode.innerText.length == 0) {
+			btnCopy.disabled = true;
+		} else {
+			btnCopy.disabled = false;
+		}
+	}
+
+	function setupBroadcastCheckbox() {
+		switch (streamStatus) {
+			case 'BROADCASTING':
+				chkBroadcast.checked = true;
+				break;
+			case 'READY':
+				chkBroadcast.checked = false;
+				break;
+		}
+
+		if (streamStatus == 'BROADCASTING' ||
+			(txtStreamId.value.length > 0 && txtStreamKey.value.length > 0)) {
+			chkBroadcast.disabled = false;
+		} else {
+			chkBroadcast.disabled = true;
+		}
+	}
+
+	function customizeHandleStreamMessage(event) {
+		//console.log('data', event.data);
+		let json = JSON.parse(event.data);
+		switch (json.method) {
+			case 'ChromaSDKStreamGetStatus':
+				streamStatus = json.result;
+				if (streamStatus) {
+					setStatus(streamStatus);
+				}
+				break;
+			case 'ChromaSDKStreamGetAuthShortcode':
+				if (json.shortcode && json.shortcode.length > 0) {
+					timerRequest = Date.now() + (1000 * 60 * 5); // +5 minutes
+					txtShortcode.innerText = json.shortcode;
+				}
+				break;
+			case 'ChromaSDKStreamGetId':
+				if (streamStatus == 'READY' && json.result == 'SUCCESS') {
+					if (json.stream_id && json.stream_id) {
+						txtStreamId.value = json.stream_id;
+					}
+				}
+				break;
+			case 'ChromaSDKStreamGetKey':
+				if (streamStatus == 'READY' && json.result == 'SUCCESS') {
+					if (json.stream_key && json.stream_key) {
+						txtStreamKey.value = json.stream_key;
+					}
+				}
+				break;
+			case 'ChromaSDKStreamReleaseShortcode':
+				txtShortcode.innerText = '';
+				timerRequest = Date.now();
+				break;
+		}
+	}
+
+	btnGetShortcode.onclick = function (evt) {
+		txtStreamId.value = '';
+		txtStreamKey.value = '';
+		if (streamSocket != undefined && streamSocket.readyState === SOCKET_OPEN) {
+			let sendJson = {
+				"method": "ChromaSDKStreamGetAuthShortcode",
+				"platform": "PC",
+				"title": "HTML5 Chroma Stream App"
+			};
+			streamSocket.send(JSON.stringify(sendJson));
+		}
+	};
+
+	btnCopy.onclick = function () {
+		navigator.clipboard.writeText(txtShortcode.innerText);
+	};
+
+	chkBroadcast.onclick = function (evt) {
+		let sendJson;
+		if (streamSocket != undefined && streamSocket.readyState === SOCKET_OPEN) {
+			if (chkBroadcast.checked) {
+				sendJson = {
+					"method": "ChromaSDKStreamBroadcast",
+					"stream_id": txtStreamId.value,
+					"stream_key": txtStreamKey.value,
+					"timestamp": 0
+				};
+			} else {
+				sendJson = {
+					"method": "ChromaSDKStreamBroadcastEnd"
+				};
+			}
+			streamSocket.send(JSON.stringify(sendJson));
+		}
+
+	};
+
+	function tick() {
+
+		setupBtnGetShortcode();
+
+		setupBtnCopy();
+
+		setupBroadcastCheckbox();
+
+		if (timerRequest > Date.now()) {
+
+			if (txtStreamId.value.length > 0 && txtStreamKey.value.length > 0) {
+
+				let sendJson = {
+					"method": "ChromaSDKStreamReleaseShortcode",
+					"shortcode": txtShortcode.innerText
+				};
+				streamSocket.send(JSON.stringify(sendJson));
+
+				return;
+			}
+
+			let sendJson = {
+				"method": "ChromaSDKStreamGetId",
+				"shortcode": txtShortcode.innerText
+			};
+			streamSocket.send(JSON.stringify(sendJson));
+
+			sendJson = {
+				"method": "ChromaSDKStreamGetKey",
+				"shortcode": txtShortcode.innerText
+			};
+			streamSocket.send(JSON.stringify(sendJson));
+		}
+	}
+
+	connectStreamSocket();
+	monitorStreamSocket();
+
+</script>
+
+</html>
