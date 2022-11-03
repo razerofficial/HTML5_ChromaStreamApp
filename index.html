@@ -48,16 +48,22 @@
 				</div>
 				<div style="display: flex; flex-direction: row;">
 					<label class="padded">Stream Id:</label>
-					<input id="txtStreamId" type="text" class="padded"></input>
+					<input id="txtStreamId" name="txtStreamId" type="text" class="padded"></input>
 				</div>
 				<div style="display: flex; flex-direction: row;">
 					<label class="padded">Stream Key:</label>
-					<input id="txtStreamKey" type="password" class="padded"></input>
+					<input id="txtStreamKey" name="txtStreamKey" type="password" class="padded"></input>
 				</div>
 				<div style="display: flex; flex-direction: row;">
 					<label class="padded" for="chkBroadcast">Broadcast Chroma RGB:</label>
 					<input type="checkbox" id="chkBroadcast" class="padded" disabled></input>
-					<label class="padded" style="margin-left: 100px">Status:</label>
+				</div>
+				<div style="display: flex; flex-direction: row;">
+					<label class="padded" for="chkWatch">Watch Chroma RGB:</label>
+					<input type="checkbox" id="chkWatch" class="padded" disabled></input>
+				</div>
+				<div style="display: flex; flex-direction: row;">
+					<label class="padded">Status:</label>
 					<span id="txtStatus" class="padded"></span>
 				</div>
 			</div>
@@ -76,7 +82,8 @@
 
 	function connectStreamSocket() {
 		if (streamSocket == undefined) {
-			streamSocket = new WebSocket("wss://chromasdk.io:13340/razer/stream");
+			let url = "wss://chromasdk.io:13340/razer/stream";
+			streamSocket = new WebSocket(url);
 			streamSocket.onopen = function (event) {
 				//console.log('Stream socket opened');
 				connectedOnce = true;
@@ -147,21 +154,40 @@
 		}
 	}
 
-	function setupBroadcastCheckbox() {
+	function setupCheckboxes() {
 		switch (streamStatus) {
 			case 'BROADCASTING':
 				chkBroadcast.checked = true;
+				chkWatch.checked = false;
+				break;
+			case 'WATCHING':
+				chkBroadcast.checked = false;
+				chkWatch.checked = true;
 				break;
 			case 'READY':
 				chkBroadcast.checked = false;
+				chkWatch.checked = false;
 				break;
 		}
 
-		if (streamStatus == 'BROADCASTING' ||
-			(txtStreamId.value.length > 0 && txtStreamKey.value.length > 0)) {
-			chkBroadcast.disabled = false;
-		} else {
-			chkBroadcast.disabled = true;
+		switch (streamStatus) {
+			case 'BROADCASTING':
+				chkBroadcast.disabled = false;
+				chkWatch.disabled = true;
+				break;
+			case 'WATCHING':
+				chkBroadcast.disabled = true;
+				chkWatch.disabled = false;
+				break;
+			default:
+				if (txtStreamId.value.length > 0) {
+					chkBroadcast.disabled = txtStreamKey.value.length == 0;
+					chkWatch.disabled = false;
+				} else {
+					chkBroadcast.disabled = true;
+					chkWatch.disabled = true;
+				}
+				break;
 		}
 	}
 
@@ -239,13 +265,33 @@
 
 	};
 
+	chkWatch.onclick = function (evt) {
+		let sendJson;
+		if (streamSocket != undefined && streamSocket.readyState === SOCKET_OPEN) {
+			if (chkWatch.checked) {
+				sendJson = {
+					"method": "ChromaSDKStreamWatch",
+					"stream_id": txtStreamId.value,
+					"timestamp": 0
+				};
+			} else {
+				sendJson = {
+					"method": "ChromaSDKStreamWatchEnd"
+				};
+			}
+			//console.log('send', sendJson);
+			streamSocket.send(JSON.stringify(sendJson));
+		}
+
+	};
+
 	function tick() {
 
 		setupBtnGetShortcode();
 
 		setupBtnCopy();
 
-		setupBroadcastCheckbox();
+		setupCheckboxes();
 
 		if (timerRequest > Date.now()) {
 
