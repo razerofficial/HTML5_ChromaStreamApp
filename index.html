@@ -8,6 +8,7 @@
 	<style>
 		body {
 			font-family: Calibri;
+			overflow: hidden;
 		}
 
 		a {
@@ -44,15 +45,15 @@
 					<label id="txtShortcode" class="padded"
 						style="width: 100px; height: 20px; border: 1px solid white; text-align: center"></label>
 					<button id="btnCopy" class="padded" disabled>Copy</button>
-					<a target="_blank" href="https://stream.razer.com/">Open Razer Streaming Portal</a>
+					<a target="_blank" href="https://stream.razer.com/profile/">Open Razer Streaming Portal</a>
 				</div>
 				<div style="display: flex; flex-direction: row;">
 					<label class="padded">Stream Id:</label>
-					<input id="txtStreamId" name="txtStreamId" type="text" class="padded"></input>
+					<input id="txtStreamId" type="text" class="padded"></input>
 				</div>
 				<div style="display: flex; flex-direction: row;">
 					<label class="padded">Stream Key:</label>
-					<input id="txtStreamKey" name="txtStreamKey" type="password" class="padded"></input>
+					<input id="txtStreamKey" type="password" class="padded"></input>
 				</div>
 				<div style="display: flex; flex-direction: row;">
 					<label class="padded" for="chkBroadcast">Broadcast Chroma RGB:</label>
@@ -73,6 +74,13 @@
 
 <script>
 
+	// auto populate stream_id if query param is used
+	const urlParams = new URLSearchParams(document.location.search);
+	streamId = urlParams.get('stream_id');
+	if (streamId != undefined && streamId != '') {
+		txtStreamId.value = streamId;
+	}
+
 	const SOCKET_OPEN = 1;
 	var streamStatus = '';
 	var streamSocket = null;
@@ -83,6 +91,7 @@
 	function connectStreamSocket() {
 		if (streamSocket == undefined) {
 			let url = "wss://chromasdk.io:13340/razer/stream";
+			//let url = "ws://localhost:13344/razer/stream";
 			streamSocket = new WebSocket(url);
 			streamSocket.onopen = function (event) {
 				//console.log('Stream socket opened');
