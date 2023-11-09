@@ -4,6 +4,7 @@
 <head>
 	<meta charset="utf-8">
 	<title>Chroma Stream App</title>
+	<!--<script src="../ChromaCommon/ChromaSDKWS.js"></script>-->
 	<script src="ChromaSDKWS.js"></script>
 	<style>
 		body {
@@ -74,12 +75,39 @@
 
 <script>
 
+	var localStorage = window.localStorage;
+
 	// auto populate stream_id if query param is used
 	const urlParams = new URLSearchParams(document.location.search);
 	streamId = urlParams.get('stream_id');
+	if ((!streamId || streamId != '') &&
+		localStorage &&
+		localStorage.getItem('KEY_STREAM_ID')) {
+		streamId = localStorage.getItem('KEY_STREAM_ID');
+    }
 	if (streamId != undefined && streamId != '') {
 		txtStreamId.value = streamId;
 	}
+	txtStreamId.addEventListener('input', function (evt) {
+		if (localStorage) {
+			localStorage.setItem('KEY_STREAM_ID', txtStreamId.value);
+		}
+	});
+
+	let streamKey = '';
+	if ((!streamKey || streamKey != '') &&
+		localStorage &&
+		localStorage.getItem('KEY_STREAM_KEY')) {
+		streamKey = localStorage.getItem('KEY_STREAM_KEY');
+    }
+	if (streamKey != undefined && streamKey != '') {
+		txtStreamKey.value = streamKey;
+	}
+	txtStreamKey.addEventListener('input', function (evt) {
+		if (localStorage) {
+			localStorage.setItem('KEY_STREAM_KEY', txtStreamKey.value);
+		}
+	});
 
 	const SOCKET_OPEN = 1;
 	var streamStatus = '';
@@ -90,8 +118,8 @@
 
 	function connectStreamSocket() {
 		if (streamSocket == undefined) {
-			let url = "wss://chromasdk.io:13340/razer/stream";
-			//let url = "ws://localhost:13344/razer/stream";
+			//let url = "wss://chromasdk.io:13340/razer/stream";
+			let url = "ws://localhost:13344/razer/stream";
 			streamSocket = new WebSocket(url);
 			streamSocket.onopen = function (event) {
 				//console.log('Stream socket opened');
